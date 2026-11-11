@@ -1,8 +1,8 @@
 [package]
 name = "dirverify"
-version = "0.1.0"
+version = "0.0.0"
 edition = "2024"
-description = "Verify two directory trees match: cheap size pass, then byte-exact pass"
+description = "Verify that two directory trees are identical, reporting only the differences"
 license = "MIT"
 repository = "https://github.com/ClemPera/dirverify"
 
