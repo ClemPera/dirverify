@@ -38,7 +38,8 @@ fn walk(root: &Path, dir: &Path, scan: &mut Scan) -> io::Result<()> {
         if kind.is_dir() {
             walk(root, &path, scan)?;
         } else if kind.is_file() {
-            scan.files.insert(relative(root, &path), entry.metadata()?.len());
+            scan.files
+                .insert(relative(root, &path), entry.metadata()?.len());
         } else if kind.is_symlink() {
             // Follow file symlinks, ignore directory ones to avoid cycles.
             match fs::metadata(&path) {

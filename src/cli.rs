@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use clap::{Parser, ValueEnum};
+use std::path::PathBuf;
 
 /// Compare two directory trees and print only what differs.
 #[derive(Parser, Debug)]
