@@ -7,7 +7,7 @@ use std::thread;
 
 use crate::progress::Progress;
 
-/// Per-file read buffer. Large enough that syscall overhead disappears on 100 GB files.
+/// Read size per file. Large enough to keep syscall overhead negligible.
 const CHUNK: usize = 4 << 20;
 
 pub struct Compared {
@@ -91,7 +91,7 @@ pub fn compare_all(
                             progress.advance(len);
                         })
                     });
-                    // Unread bytes still count as done so the bar cannot stall on errors.
+                    // Unread bytes still count as done so progress reaches the total after an error.
                     progress.advance(size.saturating_sub(counted));
                     progress.saw_file(rel);
 

@@ -32,11 +32,11 @@ pub struct Args {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum Mode {
-    /// Sizes only; fast but blind to same-size corruption.
+    /// Compare file sizes only.
     Size,
-    /// Bytes only; reports content differences even for uneven sizes.
+    /// Compare file contents only.
     Content,
-    /// Sizes first, then bytes for every pair of equal size.
+    /// Compare sizes, then the contents of equal-size pairs.
     Both,
 }
 
@@ -52,11 +52,11 @@ impl Mode {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum Progress {
-    /// Live line when stderr is a terminal, silent otherwise.
+    /// Live line on a terminal, silent otherwise.
     Auto,
-    /// Always report: live line on a terminal, periodic lines in a pipe.
+    /// Live line on a terminal, periodic lines otherwise.
     Always,
-    /// Never report.
+    /// Do not report progress.
     Never,
 }
 

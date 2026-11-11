@@ -26,6 +26,24 @@ pub fn size_difference(a: u64, b: u64) -> String {
     )
 }
 
+/// `file` or `files` for a count.
+pub fn plural(value: u64) -> &'static str {
+    if value == 1 { "file" } else { "files" }
+}
+
+/// Group digits in threes, e.g. `12483` becomes `12,483`.
+pub fn count(value: u64) -> String {
+    let digits = value.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(digit);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -51,5 +69,21 @@ mod tests {
             size_difference(100, 1024),
             "B is larger by 924 B (A 100 B, B 1.0 KiB)"
         );
+    }
+
+    #[test]
+    fn plurals_follow_the_count() {
+        assert_eq!(plural(0), "files");
+        assert_eq!(plural(1), "file");
+        assert_eq!(plural(2), "files");
+    }
+
+    #[test]
+    fn counts_group_digits_in_threes() {
+        assert_eq!(count(0), "0");
+        assert_eq!(count(999), "999");
+        assert_eq!(count(1000), "1,000");
+        assert_eq!(count(12483), "12,483");
+        assert_eq!(count(1234567), "1,234,567");
     }
 }

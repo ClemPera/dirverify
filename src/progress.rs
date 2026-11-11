@@ -239,9 +239,10 @@ impl State {
 
         if self.total_bytes == 0 {
             return format!(
-                "{}: {} files, {}",
+                "{}: {} {}, {}",
                 self.label,
-                thousands(files),
+                report::count(files),
+                report::plural(files),
                 report::size(bytes)
             );
         }
@@ -270,18 +271,6 @@ impl State {
     }
 }
 
-fn thousands(value: u64) -> String {
-    let digits = value.to_string();
-    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
-    for (index, digit) in digits.chars().enumerate() {
-        if index > 0 && (digits.len() - index).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(digit);
-    }
-    out
-}
-
 fn duration(seconds: u64) -> String {
     let (hours, minutes, seconds) = (seconds / 3600, seconds % 3600 / 60, seconds % 60);
     if hours > 0 {
@@ -291,7 +280,7 @@ fn duration(seconds: u64) -> String {
     }
 }
 
-/// Keep the informative end of a long path.
+/// Truncate from the left so the file name stays visible.
 fn tail(text: &str, width: usize) -> String {
     let count = text.chars().count();
     if count <= width {
@@ -304,15 +293,6 @@ fn tail(text: &str, width: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn thousands_separates_groups() {
-        assert_eq!(thousands(0), "0");
-        assert_eq!(thousands(999), "999");
-        assert_eq!(thousands(1000), "1,000");
-        assert_eq!(thousands(12483), "12,483");
-        assert_eq!(thousands(1234567), "1,234,567");
-    }
 
     #[test]
     fn durations_switch_to_hours_when_needed() {

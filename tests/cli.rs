@@ -32,7 +32,7 @@ fn stdout(output: &Output) -> String {
 }
 
 #[test]
-fn identical_trees_print_only_the_ok_line() {
+fn identical_trees_produce_no_output() {
     let (_temp, a, b) = trees();
     put(&a, "nested/file.bin", b"payload");
     put(&b, "nested/file.bin", b"payload");
@@ -40,7 +40,7 @@ fn identical_trees_print_only_the_ok_line() {
     let output = dirverify(&a, &b, &[]);
 
     assert_eq!(output.status.code(), Some(0));
-    assert_eq!(stdout(&output), "otherwise okay\n");
+    assert_eq!(stdout(&output), "");
 }
 
 #[test]
@@ -54,14 +54,13 @@ fn missing_files_name_the_side_that_lacks_them() {
 
     assert_eq!(output.status.code(), Some(1));
     assert!(
-        text.contains("only-a.txt: missing in B (A has 3 B)"),
+        text.contains("only-a.txt: missing from B, present in A (3 B)"),
         "{text}"
     );
     assert!(
-        text.contains("only-b.txt: missing in A (B has 4 B)"),
+        text.contains("only-b.txt: missing from A, present in B (4 B)"),
         "{text}"
     );
-    assert!(!text.contains("otherwise okay"));
 }
 
 #[test]
@@ -99,7 +98,7 @@ fn size_mode_skips_the_byte_pass() {
     let output = dirverify(&a, &b, &["--mode", "size"]);
 
     assert_eq!(output.status.code(), Some(0));
-    assert_eq!(stdout(&output), "otherwise okay\n");
+    assert_eq!(stdout(&output), "");
 }
 
 #[test]
@@ -123,10 +122,9 @@ fn verbose_lists_matches_and_prints_a_summary() {
     let text = stdout(&dirverify(&a, &b, &["-v"]));
 
     assert!(text.contains("same.bin: identical"), "{text}");
-    assert!(
-        text.contains("A: 1 files, B: 1 files, 1 compared byte-for-byte"),
-        "{text}"
-    );
+    assert!(text.contains("A:        1 file, 4 B"), "{text}");
+    assert!(text.contains("compared: 1 file, 4 B"), "{text}");
+    assert!(text.contains("result:   no differences"), "{text}");
 }
 
 #[test]
@@ -147,7 +145,7 @@ fn progress_stays_off_when_stderr_is_piped() {
     let output = dirverify(&a, &b, &[]);
 
     assert!(output.stderr.is_empty());
-    assert_eq!(stdout(&output), "otherwise okay\n");
+    assert_eq!(stdout(&output), "");
 }
 
 #[test]
@@ -164,5 +162,5 @@ fn progress_always_reports_each_step_on_stderr() {
     assert!(text.contains("scanning B"), "{text}");
     assert!(text.contains("comparing: 100.0%"), "{text}");
     assert!(text.contains("nested/same.bin"), "{text}");
-    assert_eq!(stdout(&output), "otherwise okay\n");
+    assert_eq!(stdout(&output), "");
 }
