@@ -5,6 +5,8 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 
+use crate::progress::Progress;
+
 /// Per-file read buffer. Large enough that syscall overhead disappears on 100 GB files.
 const CHUNK: usize = 4 << 20;
 
@@ -19,7 +21,7 @@ pub fn same_file(a: &Path, b: &Path) -> io::Result<bool> {
     let mut file_b = File::open(b)?;
     let mut buf_a = vec![0; CHUNK];
     let mut buf_b = vec![0; CHUNK];
-    same_stream(&mut file_a, &mut file_b, &mut buf_a, &mut buf_b)
+    same_stream(&mut file_a, &mut file_b, &mut buf_a, &mut buf_b, |_| {})
 }
 
 fn same_stream(
@@ -27,10 +29,12 @@ fn same_stream(
     file_b: &mut File,
     buf_a: &mut [u8],
     buf_b: &mut [u8],
+    mut on_read: impl FnMut(u64),
 ) -> io::Result<bool> {
     loop {
         let len_a = fill(file_a, buf_a)?;
         let len_b = fill(file_b, buf_b)?;
+        on_read(len_a as u64);
         if len_a != len_b || buf_a[..len_a] != buf_b[..len_b] {
             return Ok(false);
         }
@@ -54,12 +58,18 @@ fn fill(file: &mut File, buf: &mut [u8]) -> io::Result<usize> {
     Ok(filled)
 }
 
-/// Compare relative paths from tree `a` against tree `b` using `jobs` threads.
+/// Compare `(relative path, size)` pairs from tree `a` against tree `b` using `jobs` threads.
 /// Results are sorted by relative path regardless of completion order.
-pub fn compare_all(rels: &[PathBuf], a: &Path, b: &Path, jobs: usize) -> Vec<Compared> {
+pub fn compare_all(
+    pairs: &[(PathBuf, u64)],
+    a: &Path,
+    b: &Path,
+    jobs: usize,
+    progress: &Progress,
+) -> Vec<Compared> {
     let next = AtomicUsize::new(0);
-    let done = Mutex::new(Vec::with_capacity(rels.len()));
-    let workers = jobs.max(1).min(rels.len().max(1));
+    let done = Mutex::new(Vec::with_capacity(pairs.len()));
+    let workers = jobs.max(1).min(pairs.len().max(1));
 
     thread::scope(|scope| {
         for _ in 0..workers {
@@ -70,10 +80,21 @@ pub fn compare_all(rels: &[PathBuf], a: &Path, b: &Path, jobs: usize) -> Vec<Com
 
                 loop {
                     let index = next.fetch_add(1, Ordering::Relaxed);
-                    let Some(rel) = rels.get(index) else { break };
+                    let Some((rel, size)) = pairs.get(index) else {
+                        break;
+                    };
+
+                    let mut counted = 0u64;
                     let result = open_pair(a, b, rel).and_then(|(mut file_a, mut file_b)| {
-                        same_stream(&mut file_a, &mut file_b, &mut buf_a, &mut buf_b)
+                        same_stream(&mut file_a, &mut file_b, &mut buf_a, &mut buf_b, |len| {
+                            counted += len;
+                            progress.advance(len);
+                        })
                     });
+                    // Unread bytes still count as done so the bar cannot stall on errors.
+                    progress.advance(size.saturating_sub(counted));
+                    progress.saw_file(rel);
+
                     local.push(Compared {
                         rel: rel.clone(),
                         result,
@@ -97,6 +118,7 @@ fn open_pair(a: &Path, b: &Path, rel: &Path) -> io::Result<(File, File)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::progress::{Progress, When};
     use std::fs;
     use tempfile::tempdir;
 
@@ -160,12 +182,13 @@ mod tests {
         fs::write(a.join("diff"), b"one").unwrap();
         fs::write(b.join("diff"), b"two").unwrap();
 
-        let rels = vec![
-            PathBuf::from("nested/same"),
-            PathBuf::from("diff"),
-            PathBuf::from("nested/same"),
+        let pairs = vec![
+            (PathBuf::from("nested/same"), 4),
+            (PathBuf::from("diff"), 3),
+            (PathBuf::from("nested/same"), 4),
         ];
-        let results = compare_all(&rels, &a, &b, 2);
+        let progress = Progress::new(When::Never);
+        let results = compare_all(&pairs, &a, &b, 2, &progress);
 
         assert_eq!(results.len(), 3);
         assert_eq!(results[0].rel, PathBuf::from("diff"));

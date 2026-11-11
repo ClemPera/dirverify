@@ -1,6 +1,8 @@
 use clap::{Parser, ValueEnum};
 use std::path::PathBuf;
 
+use crate::progress::When;
+
 /// Compare two directory trees and print only what differs.
 #[derive(Parser, Debug)]
 #[command(name = "dirverify", version, about)]
@@ -18,6 +20,10 @@ pub struct Args {
     /// Threads for the byte-exact pass.
     #[arg(short, long)]
     pub jobs: Option<usize>,
+
+    /// Progress display on stderr.
+    #[arg(long, value_enum, default_value_t = Progress::Auto)]
+    pub progress: Progress,
 
     /// Also print files that match, plus per-pass timings.
     #[arg(short, long)]
@@ -41,6 +47,26 @@ impl Mode {
 
     pub fn compares_content(self) -> bool {
         matches!(self, Mode::Content | Mode::Both)
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum Progress {
+    /// Live line when stderr is a terminal, silent otherwise.
+    Auto,
+    /// Always report: live line on a terminal, periodic lines in a pipe.
+    Always,
+    /// Never report.
+    Never,
+}
+
+impl From<Progress> for When {
+    fn from(value: Progress) -> Self {
+        match value {
+            Progress::Auto => When::Auto,
+            Progress::Always => When::Always,
+            Progress::Never => When::Never,
+        }
     }
 }
 

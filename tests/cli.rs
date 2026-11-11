@@ -137,3 +137,32 @@ fn unreadable_root_is_an_error() {
     assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stderr).contains("error:"));
 }
+
+#[test]
+fn progress_stays_off_when_stderr_is_piped() {
+    let (_temp, a, b) = trees();
+    put(&a, "same.bin", b"abcd");
+    put(&b, "same.bin", b"abcd");
+
+    let output = dirverify(&a, &b, &[]);
+
+    assert!(output.stderr.is_empty());
+    assert_eq!(stdout(&output), "otherwise okay\n");
+}
+
+#[test]
+fn progress_always_reports_each_step_on_stderr() {
+    let (_temp, a, b) = trees();
+    put(&a, "nested/same.bin", b"abcd");
+    put(&b, "nested/same.bin", b"abcd");
+
+    let output = dirverify(&a, &b, &["--progress", "always"]);
+    let text = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(output.status.code(), Some(0));
+    assert!(text.contains("scanning A"), "{text}");
+    assert!(text.contains("scanning B"), "{text}");
+    assert!(text.contains("comparing: 100.0%"), "{text}");
+    assert!(text.contains("nested/same.bin"), "{text}");
+    assert_eq!(stdout(&output), "otherwise okay\n");
+}

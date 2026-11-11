@@ -12,7 +12,7 @@ Two passes:
 ## Usage
 
 ```
-dirverify <A> <B> [--mode size|content|both] [--jobs N] [--verbose]
+dirverify <A> <B> [--mode size|content|both] [--jobs N] [--progress auto|always|never] [--verbose]
 ```
 
 `A` is the reference tree, `B` the tree being verified. Both names appear in the output.
@@ -23,7 +23,21 @@ dirverify <A> <B> [--mode size|content|both] [--jobs N] [--verbose]
 | `-m, --mode content` | bytes only; uneven files are compared too (reported as content differences) |
 | `-m, --mode both` | size pass, then byte pass for equal-size pairs (default) |
 | `-j, --jobs N` | worker threads for the byte pass (default: available parallelism) |
+| `--progress auto\|always\|never` | progress on stderr; `auto` is live only when stderr is a terminal |
 | `-v, --verbose` | also list matching files, plus pass timings and totals |
+
+## Progress
+
+Progress goes to stderr, never to stdout, so the report stays pipeable. Three steps are
+announced: `scanning A`, `scanning B`, `comparing`.
+
+```
+comparing:  42.4%  1.4 GiB / 3.3 GiB  1.5 GiB/s  eta 0:01  archive/rip.mkv
+```
+
+On a terminal the line is redrawn in place and cleared when the step ends. With
+`--progress always` in a pipe it becomes one line per step plus a refresh every 30 s, which
+is what you want in a log. `--progress never` silences it entirely.
 
 ## Output
 
