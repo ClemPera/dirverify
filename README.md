@@ -1,5 +1,7 @@
 # dirverify
 
+[![CI](https://github.com/ClemPera/dirverify/actions/workflows/ci.yml/badge.svg)](https://github.com/ClemPera/dirverify/actions/workflows/ci.yml)
+
 Check that two directory trees really match. Prints only what differs.
 
 Two passes:
@@ -77,4 +79,10 @@ Read errors go to stderr and also make the run exit `1`.
 ```
 cargo build --release
 ./target/release/dirverify --help
+```
+
+Or install it onto your `PATH`:
+
+```
+cargo install --path .
 ```
