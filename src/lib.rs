@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod compare;
 pub mod report;
 pub mod scan;
 
@@ -14,6 +15,7 @@ pub struct Outcome {
     pub files_a: usize,
     pub files_b: usize,
     pub skipped: usize,
+    pub compared: usize,
     pub elapsed_scan: f64,
     pub elapsed_content: f64,
 }
@@ -35,7 +37,7 @@ pub fn run(args: &Args) -> Result<Outcome> {
     all.sort();
     all.dedup();
 
-    let mut equal_size = Vec::new();
+    let mut to_compare = Vec::new();
     for rel in all {
         match (a.files.get(rel), b.files.get(rel)) {
             (Some(size), None) => {
@@ -54,21 +56,44 @@ pub fn run(args: &Args) -> Result<Outcome> {
                     report::size(*size)
                 );
             }
-            (Some(size_a), Some(size_b)) if size_a != size_b => {
-                outcome.problems += 1;
-                println!(
-                    "{}: size differs, {}",
-                    rel.display(),
-                    report::size_difference(*size_a, *size_b)
-                );
-            }
-            (Some(size), Some(_)) => {
-                if args.verbose {
-                    println!("{}: same size ({})", rel.display(), report::size(*size));
+            (Some(size_a), Some(size_b)) => {
+                if size_a != size_b && args.mode.reports_size() {
+                    outcome.problems += 1;
+                    println!(
+                        "{}: size differs, {}",
+                        rel.display(),
+                        report::size_difference(*size_a, *size_b)
+                    );
+                } else if args.mode.compares_content() {
+                    to_compare.push(rel.to_path_buf());
+                } else if args.verbose {
+                    println!("{}: same size ({})", rel.display(), report::size(*size_a));
                 }
-                equal_size.push(rel.to_path_buf());
             }
             (None, None) => unreachable!("relative path comes from at least one tree"),
+        }
+    }
+
+    if args.mode.compares_content() {
+        let jobs = args.jobs.unwrap_or_else(cli::default_jobs);
+        let started = Instant::now();
+        let results = compare::compare_all(&to_compare, &args.a, &args.b, jobs);
+        outcome.elapsed_content = started.elapsed().as_secs_f64();
+        outcome.compared = results.len();
+
+        for item in results {
+            match item.result {
+                Ok(true) if args.verbose => println!("{}: identical", item.rel.display()),
+                Ok(true) => {}
+                Ok(false) => {
+                    outcome.problems += 1;
+                    println!("{}: content differs", item.rel.display());
+                }
+                Err(err) => {
+                    outcome.errors += 1;
+                    eprintln!("{}: unreadable: {err}", item.rel.display());
+                }
+            }
         }
     }
 
@@ -76,21 +101,26 @@ pub fn run(args: &Args) -> Result<Outcome> {
         println!("otherwise okay");
     }
     if args.verbose {
-        let mut line = String::new();
-        write!(
-            line,
-            "A: {} files, B: {} files, {} same-size, scanned in {:.2}s",
-            outcome.files_a,
-            outcome.files_b,
-            equal_size.len(),
-            outcome.elapsed_scan
-        )
-        .unwrap();
-        if outcome.skipped > 0 {
-            write!(line, ", {} skipped", outcome.skipped).unwrap();
-        }
-        println!("{line}");
+        print_summary(&outcome);
     }
 
     Ok(outcome)
+}
+
+fn print_summary(outcome: &Outcome) {
+    let mut line = String::new();
+    write!(
+        line,
+        "A: {} files, B: {} files, {} compared byte-for-byte",
+        outcome.files_a, outcome.files_b, outcome.compared
+    )
+    .unwrap();
+    write!(line, ", scan {:.2}s", outcome.elapsed_scan).unwrap();
+    if outcome.skipped > 0 {
+        write!(line, ", {} skipped", outcome.skipped).unwrap();
+    }
+    if outcome.elapsed_content > 0.0 {
+        write!(line, ", compare {:.2}s", outcome.elapsed_content).unwrap();
+    }
+    println!("{line}");
 }
