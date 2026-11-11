@@ -2,87 +2,91 @@
 
 [![CI](https://github.com/ClemPera/dirverify/actions/workflows/ci.yml/badge.svg)](https://github.com/ClemPera/dirverify/actions/workflows/ci.yml)
 
-Check that two directory trees really match. Prints only what differs.
+Verify that two directory trees are identical, reporting only the entries that differ.
 
-Two passes:
+## Install
 
-1. **size** — walks both trees, compares relative paths and byte sizes. Instant, even for
-   terabytes.
-2. **bytes** — for every pair with equal size, reads both files in 4 MiB chunks and stops at
-   the first differing chunk. Runs on all cores.
+Prebuilt binaries are attached to each tagged release. To build from source:
+
+```sh
+cargo build --release
+cargo install --path .
+```
 
 ## Usage
 
 ```
-dirverify <A> <B> [--mode size|content|both] [--jobs N] [--progress auto|always|never] [--verbose]
+dirverify [OPTIONS] <A> <B>
 ```
 
-`A` is the reference tree, `B` the tree being verified. Both names appear in the output.
+`A` is the reference tree, `B` the tree being verified.
 
-| flag | meaning |
+| Option | Description |
 | --- | --- |
-| `-m, --mode size` | sizes only; same-size files are assumed identical |
-| `-m, --mode content` | bytes only; uneven files are compared too (reported as content differences) |
-| `-m, --mode both` | size pass, then byte pass for equal-size pairs (default) |
-| `-j, --jobs N` | worker threads for the byte pass (default: available parallelism) |
-| `--progress auto\|always\|never` | progress on stderr; `auto` is live only when stderr is a terminal |
-| `-v, --verbose` | also list matching files, plus pass timings and totals |
-
-## Progress
-
-Progress goes to stderr, never to stdout, so the report stays pipeable. Three steps are
-announced: `scanning A`, `scanning B`, `comparing`.
-
-```
-comparing:  42.4%  1.4 GiB / 3.3 GiB  1.5 GiB/s  eta 0:01  archive/rip.mkv
-```
-
-On a terminal the line is redrawn in place and cleared when the step ends. With
-`--progress always` in a pipe it becomes one line per step plus a refresh every 30 s, which
-is what you want in a log. `--progress never` silences it entirely.
+| `-m, --mode <size\|content\|both>` | Compare sizes only, contents only, or both (default) |
+| `-j, --jobs <N>` | Worker threads for the content pass (default: available parallelism) |
+| `--progress <auto\|always\|never>` | Progress on stderr (default: `auto`) |
+| `-v, --verbose` | List matching files and print a summary |
 
 ## Output
 
-Silent when everything matches, except for a final `otherwise okay`:
+Nothing is written to stdout when the trees match. Each difference is one line, sorted by
+relative path:
 
 ```
-$ dirverify a b
-otherwise okay
+archive/2023/a.mkv: missing from B, present in A (1.4 GiB)
+archive/2023/b.mkv: missing from A, present in B (812.3 MiB)
+archive/2024/c.mkv: size differs, A is larger by 204.0 MiB (A 1.4 GiB, B 1.2 GiB)
+archive/2024/d.mkv: content differs
 ```
 
-Otherwise one line per problem, sorted by relative path:
+Exit status:
+
+| Code | Meaning |
+| --- | --- |
+| `0` | No differences |
+| `1` | Differences found, or a file could not be read |
+| `2` | Invalid arguments or an inaccessible root |
+
+Read errors are reported on stderr.
+
+With `-v`, matching files are listed as well and a summary is printed:
 
 ```
-archive/2023/rip.mkv: missing in B (A has 1.4 GiB)
-archive/2023/extra.mkv: missing in A (B has 812.3 MiB)
-archive/2024/movie.mkv: size differs, A is larger by 204.0 MiB (A 1.4 GiB, B 1.2 GiB)
-archive/2024/clip.mkv: content differs
+A:        12,483 files, 1.4 TiB
+B:        12,483 files, 1.4 TiB
+compared: 12,400 files, 1.3 TiB
+elapsed:  41.2s
+result:   no differences
 ```
 
-Exit codes: `0` identical, `1` differences found, `2` failure (bad path, unreadable file).
+## Behavior
 
-Read errors go to stderr and also make the run exit `1`.
+- Both trees are walked once and keyed by relative path. Sizes come from `lstat`, so the size
+  pass never opens a file.
+- Pairs of equal size are compared byte by byte in 4 MiB chunks on worker threads. The
+  comparison stops at the first differing chunk.
+- Files are compared directly instead of hashed: one sequential read per file, and an early
+  exit on mismatch.
+- `--mode content` compares every pair regardless of size and reports a size mismatch as a
+  content difference.
+- File symlinks are followed. Directory symlinks are not traversed.
+- The total byte count is known before the content pass starts, which is what makes the
+  percentage and ETA possible.
 
-## Notes
+## Limitations
 
-- Symlinks to files are followed and compared by content; symlinks to directories are never
-  descended into, so loops are impossible.
-- Content that differs only in size is caught by the size pass, so the byte pass never needs to
-  read files that are already known to differ.
-- Full-tree hashing is not used: a direct byte compare reads each file once and can bail out
-  early. Hashing only wins when you compare repeatedly against a stored manifest.
-- `ffprobe` is still the right first check for truncated video specifically; `dirverify` cannot
-  tell you a container is damaged, only that two files are not byte-identical.
+- Trees are not snapshotted. A file modified during a run can produce a result that matches
+  neither the state before nor after the change.
+- Comparison is byte equality only. It makes no statement about whether a file is valid for
+  its format.
+- CI covers Linux and macOS. Windows is not tested, and path separators in the output follow
+  the host platform.
 
-## Build
+## Development
 
-```
-cargo build --release
-./target/release/dirverify --help
-```
-
-Or install it onto your `PATH`:
-
-```
-cargo install --path .
+```sh
+cargo test --all-targets
+cargo clippy --all-targets --all-features -- -D warnings
+cargo fmt --all --check
 ```
